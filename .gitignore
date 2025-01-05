@@ -16,6 +16,8 @@ data/attributes/
 data/climatepy/
 data/spatial/
 
+comparison/
+
 models/
 
 ku_crc_hpc/
