@@ -1,0 +1,127 @@
+experiment_name: historical_conditions
+run_dir:
+
+data_dir: /kuhpc/work/water/l974s360/dl-stream_depletion/historical_conditions/historical
+
+train_basin_file: /kuhpc/work/water/l974s360/dl-stream_depletion/historical_conditions/historical/gauges.txt
+validation_basin_file: /kuhpc/work/water/l974s360/dl-stream_depletion/historical_conditions/historical/gauges.txt
+test_basin_file: /kuhpc/work/water/l974s360/dl-stream_depletion/historical_conditions/historical/gauges.txt
+
+train_start_date: '01/10/1980'
+train_end_date: '30/09/2005'
+validation_start_date: '01/10/2005'
+validation_end_date: '30/09/2010'
+test_start_date: '01/10/2010'
+test_end_date: '30/09/2023'
+
+seed:
+device: cuda:0
+
+dataset: generic
+
+forcings: time_series
+dynamic_inputs:
+  - pr
+  - tmmn
+  - tmmx
+  - rmin
+  - rmax
+  - sph
+  - vs
+  - srad
+  - etr
+  - irrigation
+  - other_water_use
+
+target_variables:
+- baseflow
+
+static_attributes:
+  - drainage_area
+  - elevation
+  - slope
+  - annual_min_flow
+  - annual_max_flow
+  - annual_average_flow
+  - annual_precip
+  - annual_etr
+  - aridity
+  - crop_cover
+  - irrigated_area
+  - pasture_cover
+  - forest_cover
+  - sand
+  - silt
+  - clay
+  - groundwater_depth
+  - land_surface_runoff
+  - degree_regulated
+  - reserivor_volume
+  - river_area
+  - river_volume
+  - watershed_encoded
+  - gauge_id_encoded
+ 
+clip_targets_to_zero:
+- baseflow
+
+use_basin_id_encoding: False
+
+# --- Model configuration --------------------------------------------------------------------------
+model: cudalstm
+hidden_size: 256
+initial_forget_bias: 3
+output_dropout: 0.4
+
+head: regression
+output_activation: linear
+
+#head: cmal
+#n_distributions: 3
+#n_samples: 7500
+#negative_sample_handling: clip
+#mc_dropout: False
+
+optimizer: Adam
+#loss: CMALLoss
+loss: MSE
+learning_rate:
+    #0: 1e-3
+    #10: 5e-4
+    #25: 1e-4
+    0: 1e-3
+    40: 5e-4
+    80: 1e-4
+
+batch_size: 256
+epochs: 30
+
+clip_gradient_norm: 1
+target_noise_std: 0.2
+
+predict_last_n: 1
+seq_length: 365
+num_workers: 8
+log_interval: 5
+log_tensorboard: True
+save_weights_every: 1
+validate_n_random_basins: 8
+validate_every: 1
+save_validation_results: True
+cache_validation_data: True
+
+metrics:
+- RMSE
+- NSE
+- Alpha-NSE
+- Beta-NSE
+- KGE
+- Pearson-r
+- FHV
+- FMS
+- FLV
+- Peak-Timing
+- Missed-Peaks
+- Peak-MAPE
+
+
