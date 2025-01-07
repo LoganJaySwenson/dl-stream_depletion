@@ -109,3 +109,78 @@ ggplot()+
   )
 ggsave(file.path("figures", "S1.png"), dpi=300, width = 190, height = 90, units = "mm")
 
+
+library(patchwork)
+
+pp <- list()
+
+for (i in 1:2){
+  
+  if (i == 1){
+    
+    gauge.ids = gauges |> filter(area_km < 1e4) |> _$gauge_id
+    
+    p = 
+      ggplot()+
+      geom_point(data = stream_depletion |> filter(gauge_id %in% gauge.ids), aes((irrigation  * 1233) + (other_water_use * 1233), depletion_frac, fill = pumping_frac), 
+                 color = "#000000", pch = 21, size = 3.5, alpha = 0.6)+
+      viridis::scale_fill_viridis(option="magma")+
+      labs(
+        x = "Annual water use [m\U00B3]",
+        y = "Depletion fraction",
+        fill = "Pumping frac"
+      )+
+      scale_x_continuous(
+        labels = scales::label_comma()
+      )+
+      scale_y_continuous(
+        labels = scales::label_comma()
+      )+
+      theme(
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12),
+        plot.margin = unit(c(5,5,5,5), "mm")
+      )
+    
+  } else{
+    
+    gauge.ids = gauges |> filter(area_km >= 1e4) |> _$gauge_id
+    
+    p =
+      ggplot()+
+      geom_point(data = stream_depletion |> filter(gauge_id %in% gauge.ids), aes((irrigation  * 1233) + (other_water_use * 1233), depletion_frac, fill = pumping_frac), 
+                 color = "#000000", pch = 21, size = 3.5, alpha = 0.6)+
+      viridis::scale_fill_viridis(option="magma")+
+      labs(
+        x = "Annual water use [m\U00B3]",
+        y = "Depletion fraction",
+        fill = "Pumping frac"
+      )+
+      scale_x_continuous(
+        labels = scales::label_comma()
+      )+
+      scale_y_continuous(
+        labels = scales::label_comma()
+      )+
+      theme(
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12),
+        plot.margin = unit(c(5,5,5,5), "mm")
+      )
+    
+  }
+  
+  pp[[i]] <- p
+  
+}
+
+pp_combined <- wrap_plots(pp, ncol = 2, nrow = 1)+
+  plot_layout(axis_titles = "collect", guides = "collect") & theme(legend.position = "bottom")
+
+pp_combined
+
+ggsave(file.path("figures", "S2.png"), dpi=300, width = 220, height = 220/2, units = "mm")
+
+
+
+
