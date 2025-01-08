@@ -1,7 +1,6 @@
 # 02. SFR package 
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 import geopandas as gpd
@@ -9,7 +8,7 @@ from shapely.geometry import Point, LineString
 
 import flopy
 
-from modelutils import estimate_streamflow_depletion
+from modflowutils import snap_points_to_sfr_network, evaluate_streamflow_depletion
 
 model_dir = Path("models", "MODFLOW")
 model_path = model_dir / "GMD2_transient"
@@ -49,10 +48,7 @@ gauge_ids = gauges["gauge_id"]
 gauges["geometry"] = gauges["geometry"].to_crs(domain_crs).translate(xoff = -domain_coords[0], 
                                                                      yoff = -domain_coords[1])
 
-# Snap benchmarking locations onto the model.modelgrid and plot in MODFLOW coordinates
-# FloPy’s BaseModel.modelgrid returns ibound with the origin set in the lower-left corner, but the `.intersect()` method returns i and j coordinates with the origin in the upper-left corner, consistent with MODFLOW’s internal naming convention. 
-# Also, because of how the method handles intersections of where a point is on the edge of two grid cells, it can be the case that the returned points are +/- one grid cell off from their locations in the model
-
+# Snap benchmarking locations onto the model.modelgrid and then to SFR network
 coordinates = []
 
 for idx, gauge_id in gauges.iterrows():
@@ -67,53 +63,26 @@ for idx, gauge_id in gauges.iterrows():
 gauges["i"] = gauges["i"].astype(int) 
 gauges["j"] = gauges["j"].astype(int)
 
-# Perform +/- one grid cell search to ensure snapped points are SFR cells
-# In cases where points are offset by +/- one grid cell, we perform a one grid cell search around those points and return the most upstream sfr cell.
-
-import itertools
-
-sfr_network = pd.DataFrame(model.sfr.reach_data)
-
-search_range = [-1, 0, 1]
-offsets = list(itertools.product(search_range, search_range))
-
-neighboring_cells = []
-for idx, gauge_id in gauges.iterrows():
-    for di, dj in offsets:
-        neighbor = gauge_id.copy()
-        neighbor["i"] = gauge_id["i"] + di
-        neighbor["j"] = gauge_id["j"] + dj
-        neighboring_cells.append(neighbor)
-        
-neighboring_cells = pd.DataFrame(neighboring_cells)
-
-neighboring_sfr_cells = pd.merge(neighboring_cells, sfr_network, on=["i", "j"], how="inner")
-
-res = []
-for gauge_id in gauge_ids:
-    sfr_coords = neighboring_sfr_cells[(neighboring_sfr_cells["gauge_id"] == gauge_id) & neighboring_sfr_cells["i"].isin(gauges["i"].values) & neighboring_sfr_cells["j"].isin(gauges["j"].values)]
-    if sfr_coords.empty:
-        sfr_coords = neighboring_sfr_cells.loc[neighboring_sfr_cells["reachID"] == neighboring_sfr_cells[neighboring_sfr_cells["gauge_id"] == gauge_id]["reachID"].min()]  
-    res.append(sfr_coords)
-
-res = pd.concat(res, ignore_index=True)
-
-# Reminder to self: These coordinates (i and j) are expressed in terms of MODFLOW's internal naming convention for rows/cols, but geometry is set with the orign in the lower-left corner
-gauges = pd.merge(gauges.drop(columns=["i","j"]), res[["gauge_id", "i", "j", "iseg", "ireach"]], on=["gauge_id"], how="left")
+gauges = snap_points_to_sfr_network(gauges,
+                                    pd.DataFrame(model.sfr.reach_data),
+                                    id = "gauge_id",
+                                    search_distance = [-1, 0, 1]
+                                   )
 
 gauges["x"] = gauges["geometry"].x
 gauges["y"] = gauges["geometry"].y
 gauges.drop("geometry", axis=1, inplace=True)
 
-gauges.to_csv(Path("data", "gauges_i+jcoordinates.csv"), index=False)
+gauges.to_csv(Path("data", "gauges_i+jcoordinates.csv"), index=False) # reminder to self: coordinates (i and j) are expressed in terms of MODFLOW's internal naming convention for rows/cols, but geometry is set with the orign in the lower-left corner
 
 
+# 2. Extract timeseries of fluxes Qriver [ft3/d] and estimate streamflow depletion [ft3/d]  from a baseline simulation where pumping has been set to 0.
+gauges = pd.read_csv(Path("data", "gauges_i+jcoordinates.csv"), dtype={"gauge_id":str})
 
-
-# 2. Extract timeseries of fluxes Qriver [ft3/d] and estimated streamflow depletion [ft3/d]  from a baseline simulation.
-stream_depletion = estimate_streamflow_depletion(gauges, 
+stream_depletion = evaluate_streamflow_depletion(gauges, 
                                                  historical_path = model_dir / "GMD2_transient", 
-                                                 baseline_path = model_dir / "GMD2_transient_baseline"
+                                                 baseline_path = model_dir / "GMD2_transient_baseline",
+                                                 id = "gauge_id"
                                                 )
 
 save_path = model_dir / "outputs"
@@ -123,4 +92,43 @@ else:
     save_path.mkdir(parents=True)
     
 stream_depletion.to_csv(save_path / "MODFLOW_stream_depletion.csv", index=False)
+
+
+
+# import  numpy as np
+# import matplotlib.pyplot as plt
+# from matplotlib.colors import ListedColormap
+
+# mm = 1/25.4  # mm
+ 
+# colors = ["#666666", "none", "#666666"] 
+# cmap = ListedColormap(colors)
+
+# nrows = model.nrow
+# ncols = model.ncol
+
+# bas = model.get_package("BAS6")
+# ibound = bas.ibound.array.squeeze()
+# sfr_network = pd.DataFrame(model.sfr.reach_data)
+
+# fig, ax = plt.subplots(figsize=(190*mm, 190*mm))
+# ax.imshow(ibound, cmap=cmap, vmin=-1, vmax=1, alpha=0.6, zorder=1)
+# ax.scatter(sfr_network["j"], sfr_network["i"], marker="s", color="#377EB8", zorder=2)
+# ax.scatter(gauges["j"]+0.5, gauges["i"]+0.5, marker='o', color="#F58231", edgecolor="#000000", zorder=3)
+# ax.set_xlabel("Column")
+# ax.set_ylabel("Row")
+# ax.set_aspect("equal")
+# plt.show()
+
+
+# fig, ax = plt.subplots(figsize=(190*mm, 190*mm))
+# ax.imshow(np.flip(ibound, axis=0), cmap=cmap, vmin=-1, vmax=1, alpha=0.6, origin="lower")
+# ax.scatter(sfr_network["j"], (nrows - sfr_network["i"]), marker="s", color="#377eb8", zorder=1)
+# ax.scatter(gauges["j"]+0.5, (nrows - gauges["i"]+0.5), marker='o', color="#f58231", edgecolor="#000000")
+# ax.set_xlabel("Column")
+# ax.set_ylabel("Row")
+# ax.set_aspect("equal")
+# ax.set_xlim(0,ncols)
+# ax.set_ylim(0,nrows)
+# plt.show()
 
