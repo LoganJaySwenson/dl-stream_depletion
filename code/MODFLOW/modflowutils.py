@@ -112,3 +112,53 @@ def evaluate_streamflow_depletion(points : pd.DataFrame,
     
     return stream_depletion[[id, "i", "j", "segment", "reach", "kstpkper", "ts", "sp", "Qriver_historical", "Qriver_baseline", "stream_depletion"]]
 
+
+def calculate_ts_length(nstp : int, perlen : int, tsmult : int) -> List:
+    """Calculate the length of time steps [T] in a stress period when tsmult > 1.
+    
+    The length of the first time step is calculated as:
+        ts_i = perlen * ((tsmult - 1) / (tsmult**nstp - 1))
+    Successive time steps are calculated as:
+        ts_i+1 = ts_i * tsmult
+
+    Example:
+    perlen = 182.5 
+    nstp = 10
+    tsmult = 1.2
+
+    print(calculate_ts_length(nstp, perlen, tsmult)) ; print(sum(calculate_ts_length(nstp, perlen, tsmult)))
+
+    Ref: https://water.usgs.gov/ogw/modflow/MODFLOW-2005-Guide/dis.html
+    
+    Parameters
+    ----------
+    nstp : int
+        Number of time steps in a stress period.
+    perlen : int
+        Length of a stress period.
+    tsmult : int
+        Multiplier for the length of successive time steps. 
+
+    Returns
+    -------
+    List
+        Length of each time step in a stress period.
+    """
+    stp_length = []
+    
+    for i in range(nstp):
+        if i == 0:
+            stp = perlen * ((tsmult - 1) / (tsmult**nstp - 1))
+        elif i > 0:
+            stp = stp * tsmult
+        stp_length.append(stp)
+
+    return stp_length
+
+
+
+
+
+
+
+
